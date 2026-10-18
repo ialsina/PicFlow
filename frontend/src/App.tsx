@@ -133,8 +133,10 @@ function App() {
         setStatus(st)
         const sess = await getSession(sessionId!)
         setSession(sess)
-        if (st.index_status === 'done') {
+        if (st.index_status === 'running' || st.index_status === 'done') {
           await refreshIds(sessionId!, unlabeledOnly)
+        }
+        if (st.index_status === 'done') {
           await refreshStats(sessionId!)
           if (st.training_status === 'done' || st.projection_status === 'done') {
             await refreshProjection(sessionId!)

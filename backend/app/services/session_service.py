@@ -105,58 +105,82 @@ def create_session(image_root: str, config_overrides: dict | None) -> str:
 
 
 def _index_session(session_id: str, root: Path) -> None:
-    rgb_paths = collect_rgb_image_paths(root)
-    total = len(rgb_paths)
-    config = default_session_config()
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT config_json FROM sessions WHERE id = ?", (session_id,)
-        ).fetchone()
-        if row:
-            config = json.loads(row["config_json"])
-    bins = int(config.get("histogram_bins", 18))
-
-    indexed = 0
-    with get_conn() as conn:
-        for i, path in enumerate(rgb_paths):
-            feat = extract_rgb_histogram(path, histogram_bins=bins)
-            if feat is None:
-                continue
-            mtime = path.stat().st_mtime
+    try:
+        with get_conn() as conn:
             conn.execute(
-                """
-                INSERT OR REPLACE INTO images (session_id, path, mtime, idx, features)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    session_id,
-                    str(path),
-                    mtime,
-                    indexed,
-                    feat.astype(np.float64).tobytes(),
-                ),
+                "UPDATE sessions SET index_message = ? WHERE id = ?",
+                ("Scanning for RGB images…", session_id),
             )
-            indexed += 1
-            if total and (i + 1) % max(1, total // 50) == 0:
+        rgb_paths = collect_rgb_image_paths(root)
+        total = len(rgb_paths)
+        config = default_session_config()
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT config_json FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+            if row:
+                config = json.loads(row["config_json"])
+        bins = int(config.get("histogram_bins", 18))
+
+        indexed = 0
+        commit_batch = 100
+        with get_conn() as conn:
+            for i, path in enumerate(rgb_paths):
+                feat = extract_rgb_histogram(path, histogram_bins=bins)
+                if feat is None:
+                    continue
+                mtime = path.stat().st_mtime
                 conn.execute(
                     """
-                    UPDATE sessions SET index_progress = ?, index_message = ?, total_images = ?
-                    WHERE id = ?
+                    INSERT OR REPLACE INTO images (session_id, path, mtime, idx, features)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    ((i + 1) / total, f"Indexed {i + 1}/{total}", indexed, session_id),
+                    (
+                        session_id,
+                        str(path),
+                        mtime,
+                        indexed,
+                        feat.astype(np.float64).tobytes(),
+                    ),
                 )
-        count = conn.execute(
-            "SELECT COUNT(*) AS c FROM images WHERE session_id = ?", (session_id,)
-        ).fetchone()["c"]
-        conn.execute(
-            """
-            UPDATE sessions SET index_status = 'done', index_progress = 1, index_message = ?,
-            total_images = ? WHERE id = ?
-            """,
-            (f"Indexed {count} RGB images", count, session_id),
-        )
-    _recompute_projection(session_id, method="pca")
-    _schedule_train(session_id)
+                indexed += 1
+                should_report = total and (i + 1) % max(1, total // 50) == 0
+                if should_report or indexed % commit_batch == 0:
+                    conn.execute(
+                        """
+                        UPDATE sessions SET index_progress = ?, index_message = ?, total_images = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            (i + 1) / total if total else 1.0,
+                            f"Indexed {indexed} RGB images ({i + 1}/{total} scanned)"
+                            if total
+                            else f"Indexed {indexed} RGB images",
+                            indexed,
+                            session_id,
+                        ),
+                    )
+                    conn.commit()
+            count = conn.execute(
+                "SELECT COUNT(*) AS c FROM images WHERE session_id = ?", (session_id,)
+            ).fetchone()["c"]
+            conn.execute(
+                """
+                UPDATE sessions SET index_status = 'done', index_progress = 1, index_message = ?,
+                total_images = ? WHERE id = ?
+                """,
+                (f"Indexed {count} RGB images", count, session_id),
+            )
+        _recompute_projection(session_id, method="pca")
+        _schedule_train(session_id)
+    except _ML_PIPELINE_ERRORS as e:
+        with get_conn() as conn:
+            conn.execute(
+                """
+                UPDATE sessions SET index_status = 'error', index_message = ? WHERE id = ?
+                """,
+                (f"Indexing failed: {e}", session_id),
+            )
 
 
 def get_session(session_id: str) -> dict | None:

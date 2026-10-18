@@ -156,6 +156,10 @@ export function LeftPanel({
       <div className="image-stage">
         {imgUrl ? (
           <img src={imgUrl} alt={image?.filename ?? ''} />
+        ) : status && status.index_status === 'running' ? (
+          <p className="muted">Indexing images… ({status.index_message})</p>
+        ) : total === 0 ? (
+          <p className="muted">No RGB images found in this folder</p>
         ) : (
           <p className="muted">No image selected</p>
         )}
