@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes import providers, sessions
 from app.config import settings
+from app.database_errors import database_unavailable_detail
 from app.db import engine, init_db
 
 logger = logging.getLogger(__name__)
@@ -33,13 +34,7 @@ async def database_error_handler(
     logger.exception("Database error")
     return JSONResponse(
         status_code=503,
-        content={
-            "detail": (
-                "Database unavailable. Ensure PostgreSQL is running and "
-                "PICFLOW_DATABASE_URL is correct "
-                f"(currently {settings.database_url!r})."
-            ),
-        },
+        content={"detail": database_unavailable_detail(exc)},
     )
 
 
@@ -62,10 +57,6 @@ def health():
     except SQLAlchemyError as exc:
         raise HTTPException(
             status_code=503,
-            detail=(
-                "Database unavailable. Ensure PostgreSQL is running and "
-                f"PICFLOW_DATABASE_URL is set (currently {settings.database_url!r}). "
-                f"Error: {exc}"
-            ),
+            detail=database_unavailable_detail(exc),
         ) from exc
     return {"status": "ok"}

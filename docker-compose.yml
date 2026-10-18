@@ -5,6 +5,8 @@ services:
       POSTGRES_USER: picflow
       POSTGRES_PASSWORD: picflow
       POSTGRES_DB: picflow
+    # Host port only (e.g. 5434→5432). Tools on your machine use localhost:5434;
+    # other containers must still use postgres:5432 on the Compose network.
     ports:
       - "${PICFLOW_POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -24,12 +26,26 @@ services:
     environment:
       PICFLOW_ALLOWED_ROOTS: /data/images
       PICFLOW_CORS_ORIGINS: http://localhost:5173
+      # Do not use PICFLOW_POSTGRES_PORT here — Postgres always listens on 5432
+      # inside the container. Port 5434 (or similar) is only for localhost access.
       PICFLOW_DATABASE_URL: postgresql+psycopg://picflow:picflow@postgres:5432/picflow
     volumes:
       - ${PICFLOW_IMAGE_MOUNT:-./sample-images}:/data/images:ro
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
 
   frontend:
     build:
@@ -40,7 +56,8 @@ services:
     environment:
       API_PROXY_TARGET: http://backend:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   picflow_pgdata:
