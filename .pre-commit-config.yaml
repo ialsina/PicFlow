@@ -1,0 +1,41 @@
+# Install: pip install pre-commit && pre-commit install
+# Run all hooks: pre-commit run --all-files
+
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+        exclude: ^frontend/package-lock\.json$
+      - id: check-toml
+      - id: detect-private-key
+      - id: mixed-line-ending
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff
+        name: ruff (backend)
+        files: ^backend/
+      - id: ruff-format
+        name: ruff format (backend)
+        files: ^backend/
+
+  - repo: local
+    hooks:
+      - id: oxlint
+        name: oxlint (frontend)
+        language: system
+        entry: npm run lint --prefix frontend
+        pass_filenames: false
+        files: ^frontend/
+        types_or: [javascript, jsx, ts, tsx, json]
