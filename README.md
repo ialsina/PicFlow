@@ -58,4 +58,11 @@ See [`config.example.yaml`](config.example.yaml). Most values can be changed in 
 
 ## Docker (optional)
 
-Provide a `backend/Dockerfile` and `frontend/Dockerfile` or run locally as above. [`docker-compose.yml`](docker-compose.yml) expects an image volume at `PICFLOW_IMAGE_MOUNT`.
+```bash
+# Mount your image folder (host path) and open http://localhost:5173
+PICFLOW_IMAGE_MOUNT=/path/to/photos docker compose up --build
+```
+
+Use **`/data/images`** (or a subfolder) as the image root in the UI — that path is inside the backend container, not on the host.
+
+[`docker-compose.yml`](docker-compose.yml) sets `API_PROXY_TARGET=http://backend:8000` so the Vite dev server in the frontend container can reach the API. Local `npm run dev` still proxies to `127.0.0.1:8000` by default.
