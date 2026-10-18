@@ -1,0 +1,6 @@
+-r ../backend/requirements.txt
+jupyter
+jupyterlab
+ipython
+matplotlib
+tqdm
