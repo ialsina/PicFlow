@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import threading
 import time
@@ -12,7 +13,7 @@ import numpy as np
 
 from app.config import default_session_config, merge_config
 from app.db import get_conn, init_db
-from app.ml.features import collect_rgb_image_paths, extract_rgb_histogram
+from app.ml.features import extract_rgb_histogram, iter_files_recursive
 from app.ml.projection import compute_kmeans, compute_pca, compute_umap
 from app.ml.providers.base import TrainConfig, check_training_ready
 from app.ml.providers.registry import create_provider
@@ -104,15 +105,15 @@ def create_session(image_root: str, config_overrides: dict | None) -> str:
     return session_id
 
 
+def _index_progress_estimate(scanned: int) -> float:
+    """Progress while total file count is unknown (large trees)."""
+    if scanned <= 0:
+        return 0.0
+    return min(0.99, math.log1p(scanned) / math.log1p(250_000))
+
+
 def _index_session(session_id: str, root: Path) -> None:
     try:
-        with get_conn() as conn:
-            conn.execute(
-                "UPDATE sessions SET index_message = ? WHERE id = ?",
-                ("Scanning for RGB images…", session_id),
-            )
-        rgb_paths = collect_rgb_image_paths(root)
-        total = len(rgb_paths)
         config = default_session_config()
         with get_conn() as conn:
             row = conn.execute(
@@ -120,14 +121,35 @@ def _index_session(session_id: str, root: Path) -> None:
             ).fetchone()
             if row:
                 config = json.loads(row["config_json"])
+            conn.execute(
+                "UPDATE sessions SET index_message = ? WHERE id = ?",
+                ("Indexing images…", session_id),
+            )
         bins = int(config.get("histogram_bins", 18))
 
         indexed = 0
+        scanned = 0
         commit_batch = 100
+        report_every = 250
         with get_conn() as conn:
-            for i, path in enumerate(rgb_paths):
+            for path in iter_files_recursive(root):
+                scanned += 1
                 feat = extract_rgb_histogram(path, histogram_bins=bins)
                 if feat is None:
+                    if scanned % report_every == 0:
+                        conn.execute(
+                            """
+                            UPDATE sessions SET index_progress = ?, index_message = ?, total_images = ?
+                            WHERE id = ?
+                            """,
+                            (
+                                _index_progress_estimate(scanned),
+                                f"Indexed {indexed} RGB images ({scanned:,} files scanned)",
+                                indexed,
+                                session_id,
+                            ),
+                        )
+                        conn.commit()
                     continue
                 mtime = path.stat().st_mtime
                 conn.execute(
@@ -144,18 +166,19 @@ def _index_session(session_id: str, root: Path) -> None:
                     ),
                 )
                 indexed += 1
-                should_report = total and (i + 1) % max(1, total // 50) == 0
-                if should_report or indexed % commit_batch == 0:
+                if (
+                    indexed == 1
+                    or indexed % commit_batch == 0
+                    or scanned % report_every == 0
+                ):
                     conn.execute(
                         """
                         UPDATE sessions SET index_progress = ?, index_message = ?, total_images = ?
                         WHERE id = ?
                         """,
                         (
-                            (i + 1) / total if total else 1.0,
-                            f"Indexed {indexed} RGB images ({i + 1}/{total} scanned)"
-                            if total
-                            else f"Indexed {indexed} RGB images",
+                            _index_progress_estimate(scanned),
+                            f"Indexed {indexed} RGB images ({scanned:,} files scanned)",
                             indexed,
                             session_id,
                         ),

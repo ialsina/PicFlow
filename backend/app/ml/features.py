@@ -38,14 +38,16 @@ def is_rgb_image_path(path: Path) -> bool:
         return False
 
 
+def iter_files_recursive(root: Path):
+    """Yield file paths under root in stable sorted order (for incremental indexing)."""
+    for dir_path, _dirnames, filenames in root.walk():
+        for name in sorted(filenames):
+            yield dir_path / name
+
+
 def collect_file_paths_recursive(root: Path) -> list[Path]:
     """All files under root, including nested directories."""
-    paths: list[Path] = []
-    for dir_path, _dirnames, filenames in root.walk():
-        for name in filenames:
-            paths.append(dir_path / name)
-    paths.sort()
-    return paths
+    return list(iter_files_recursive(root))
 
 
 def collect_rgb_image_paths(root: Path) -> list[Path]:

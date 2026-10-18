@@ -106,15 +106,31 @@ function App() {
     if (!sessionId) return
     let cancelled = false
 
+    async function pollSession() {
+      const st = await getStatus(sessionId!)
+      if (cancelled) return
+      setStatus(st)
+      const sess = await getSession(sessionId!)
+      if (cancelled) return
+      setSession(sess)
+      if (st.index_status === 'running' || st.index_status === 'done') {
+        await refreshIds(sessionId!, unlabeledOnly)
+      }
+      if (st.index_status === 'done') {
+        await refreshStats(sessionId!)
+        if (st.training_status === 'done' || st.projection_status === 'done') {
+          await refreshProjection(sessionId!)
+        }
+      }
+    }
+
     async function bootstrap() {
       try {
         const sess = await getSession(sessionId!)
         if (cancelled) return
         setSession(sess)
         localStorage.setItem('picflow_session_id', sessionId!)
-        await refreshIds(sessionId!, unlabeledOnly)
-        await refreshStats(sessionId!)
-        await refreshProjection(sessionId!)
+        await pollSession()
       } catch (e) {
         if (cancelled) return
         resetClientSession()
@@ -127,25 +143,9 @@ function App() {
 
     bootstrap().catch(console.error)
 
-    pollRef.current = window.setInterval(async () => {
-      try {
-        const st = await getStatus(sessionId!)
-        setStatus(st)
-        const sess = await getSession(sessionId!)
-        setSession(sess)
-        if (st.index_status === 'running' || st.index_status === 'done') {
-          await refreshIds(sessionId!, unlabeledOnly)
-        }
-        if (st.index_status === 'done') {
-          await refreshStats(sessionId!)
-          if (st.training_status === 'done' || st.projection_status === 'done') {
-            await refreshProjection(sessionId!)
-          }
-        }
-      } catch {
-        /* ignore poll errors */
-      }
-    }, 1500)
+    pollRef.current = window.setInterval(() => {
+      pollSession().catch(() => {})
+    }, 1000)
 
     return () => {
       cancelled = true
