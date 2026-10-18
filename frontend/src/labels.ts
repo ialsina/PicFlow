@@ -29,6 +29,16 @@ export function labelDisplayKey(labelId: number): string {
   return labelId === 9 ? '0' : String(labelId + 1)
 }
 
-export function labelName(labelId: number): string {
+export function labelName(labelId: number, labelNames?: Record<string, string>): string {
+  const custom = labelNames?.[String(labelId)]?.trim()
+  if (custom) return custom
   return `Class ${labelDisplayKey(labelId)}`
+}
+
+export function nextUnusedLabelId(active: number[], slots = 10): number | null {
+  const used = new Set(active)
+  for (let id = 0; id < slots; id++) {
+    if (!used.has(id)) return id
+  }
+  return null
 }

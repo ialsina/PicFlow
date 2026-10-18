@@ -49,7 +49,8 @@ def default_session_config() -> dict[str, Any]:
         "min_labeled_per_class": settings.min_labeled_per_class,
         "suggestion_provider": settings.suggestion_provider,
         "label_slots": 10,
-        "active_labels": list(range(10)),
+        "active_labels": [0, 1],
+        "label_names": {},
         "sklearn_mlp": {"max_iter": 200, "hidden_layer_sizes": [128, 64]},
         "knn": {"n_neighbors": 5},
         "pytorch_mlp": {

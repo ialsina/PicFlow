@@ -24,7 +24,7 @@ import {
 import { LeftPanel } from './components/LeftPanel'
 import { RightPanel } from './components/RightPanel'
 import { SessionStart } from './components/SessionStart'
-import { KEY_TO_LABEL } from './labels'
+import { KEY_TO_LABEL, labelDisplayKey, nextUnusedLabelId } from './labels'
 import './App.css'
 
 function App() {
@@ -266,6 +266,50 @@ function App() {
     await refreshStats(sessionId)
   }
 
+  const activeLabels = (() => {
+    const raw = session?.config.active_labels
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((v) => Number(v)).filter((n) => !Number.isNaN(n))
+    }
+    return [0, 1]
+  })()
+
+  const labelNames = (() => {
+    const raw = session?.config.label_names
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+      )
+    }
+    return {}
+  })()
+
+  const labelSlots =
+    typeof session?.config.label_slots === 'number' ? session.config.label_slots : 10
+
+  async function handleAddLabel() {
+    if (!sessionId || !session) return
+    const sorted = [...activeLabels].sort((a, b) => a - b)
+    const nextId = nextUnusedLabelId(sorted, labelSlots)
+    if (nextId == null) return
+    const { config } = await patchConfig(sessionId, { active_labels: [...sorted, nextId] })
+    setSession({ ...session, config })
+  }
+
+  async function handleRenameLabel(labelId: number, name: string) {
+    if (!sessionId || !session) return
+    const defaultName = `Class ${labelDisplayKey(labelId)}`
+    const trimmed = name.trim()
+    const nextNames = { ...labelNames }
+    if (!trimmed || trimmed === defaultName) {
+      delete nextNames[String(labelId)]
+    } else {
+      nextNames[String(labelId)] = trimmed
+    }
+    const { config } = await patchConfig(sessionId, { label_names: nextNames })
+    setSession({ ...session, config })
+  }
+
   if (!sessionId || !session) {
     return (
       <SessionStart
@@ -301,6 +345,11 @@ function App() {
             applyLabel(suggestion.label, 'accepted_suggestion').catch(console.error)
           }
         }}
+        activeLabels={activeLabels}
+        labelNames={labelNames}
+        labelSlots={labelSlots}
+        onAddLabel={() => handleAddLabel().catch(console.error)}
+        onRenameLabel={(id, name) => handleRenameLabel(id, name).catch(console.error)}
       />
       <RightPanel
         projection={projection}
@@ -318,6 +367,8 @@ function App() {
           const idx = imageIds.indexOf(id)
           if (idx >= 0) setCursor(idx)
         }}
+        activeLabels={activeLabels}
+        labelNames={labelNames}
       />
     </div>
   )

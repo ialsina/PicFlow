@@ -280,20 +280,69 @@ body {
   font-size: 0.95rem;
 }
 
-.legend ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.legend-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 0.35rem;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(min-content, 1fr);
+  gap: 0.35rem 0.75rem;
+  align-items: center;
 }
 
-.legend li {
+.legend-cell {
   display: flex;
   align-items: center;
   gap: 0.35rem;
   font-size: 0.85rem;
+  min-width: 0;
+}
+
+.legend-add-cell {
+  justify-content: flex-end;
+}
+
+.legend-name-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend-name-btn:hover {
+  text-decoration: underline;
+}
+
+.legend-name-input {
+  flex: 1;
+  min-width: 3rem;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid #1f77b4;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.legend-add-btn {
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  border: 1px dashed #aaa;
+  background: #fafafa;
+  cursor: pointer;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.legend-add-btn:hover {
+  border-color: #1f77b4;
+  background: #f0f7fc;
 }
 
 .legend kbd {

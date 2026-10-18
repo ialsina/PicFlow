@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
 import type { ImageDetail, SessionStatus, Suggestion } from '../api'
-import { LABEL_COLORS, labelDisplayKey, labelName } from '../labels'
+import { LABEL_COLORS, labelDisplayKey, labelName, nextUnusedLabelId } from '../labels'
 
 type Props = {
   sessionId: string
@@ -9,11 +10,80 @@ type Props = {
   suggestion: Suggestion | null
   status: SessionStatus | null
   unlabeledOnly: boolean
+  activeLabels: number[]
+  labelNames: Record<string, string>
+  labelSlots: number
   onToggleUnlabeled: () => void
   onEndSession: () => void
   onPrev: () => void
   onNext: () => void
   onAcceptSuggestion: () => void
+  onAddLabel: () => void
+  onRenameLabel: (labelId: number, name: string) => void
+}
+
+function LabelNameCell({
+  labelId,
+  labelNames,
+  onRename,
+}: {
+  labelId: number
+  labelNames: Record<string, string>
+  onRename: (name: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const display = labelName(labelId, labelNames)
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus()
+  }, [editing])
+
+  function startEdit() {
+    setDraft(display)
+    setEditing(true)
+  }
+
+  function commit() {
+    setEditing(false)
+    const trimmed = draft.trim()
+    onRename(trimmed || labelName(labelId))
+  }
+
+  function cancel() {
+    setEditing(false)
+    setDraft(display)
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        className="legend-name-input"
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            commit()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            cancel()
+          }
+        }}
+      />
+    )
+  }
+
+  return (
+    <button type="button" className="legend-name-btn" onClick={startEdit} title="Click to rename">
+      {display}
+    </button>
+  )
 }
 
 export function LeftPanel({
@@ -24,15 +94,23 @@ export function LeftPanel({
   suggestion,
   status,
   unlabeledOnly,
+  activeLabels,
+  labelNames,
+  labelSlots,
   onToggleUnlabeled,
   onEndSession,
   onPrev,
   onNext,
   onAcceptSuggestion,
+  onAddLabel,
+  onRenameLabel,
 }: Props) {
   const imgUrl = image
     ? `/api/sessions/${sessionId}/images/${image.id}/file`
     : null
+
+  const sortedLabels = [...activeLabels].sort((a, b) => a - b)
+  const canAdd = nextUnusedLabelId(sortedLabels, labelSlots) != null
 
   return (
     <section className="panel left-panel">
@@ -46,7 +124,7 @@ export function LeftPanel({
                 className="current-label"
                 style={{ background: LABEL_COLORS[image.label] }}
               >
-                {labelName(image.label)}
+                {labelName(image.label, labelNames)}
               </span>
             )}
           </span>
@@ -88,7 +166,7 @@ export function LeftPanel({
           <span>
             Suggestion:{' '}
             <strong style={{ color: LABEL_COLORS[suggestion.label] }}>
-              {labelName(suggestion.label)}
+              {labelName(suggestion.label, labelNames)}
             </strong>
             {suggestion.confidence != null && (
               <span className="muted"> ({(suggestion.confidence * 100).toFixed(0)}%)</span>
@@ -107,15 +185,26 @@ export function LeftPanel({
 
       <div className="legend">
         <h3>Labels</h3>
-        <ul>
-          {LABEL_COLORS.map((color, id) => (
-            <li key={id}>
-              <kbd>{labelDisplayKey(id)}</kbd>
-              <span className="swatch" style={{ background: color }} />
-              {labelName(id)}
-            </li>
+        <div className="legend-grid">
+          {sortedLabels.map((id) => (
+              <div key={id} className="legend-cell">
+                <kbd>{labelDisplayKey(id)}</kbd>
+                <span className="swatch" style={{ background: LABEL_COLORS[id] }} />
+                <LabelNameCell
+                  labelId={id}
+                  labelNames={labelNames}
+                  onRename={(name) => onRenameLabel(id, name)}
+                />
+              </div>
           ))}
-        </ul>
+          {canAdd && (
+            <div className="legend-cell legend-add-cell">
+              <button type="button" className="legend-add-btn" onClick={onAddLabel}>
+                + Add
+              </button>
+            </div>
+          )}
+        </div>
         <p className="muted keys-hint">← → or j/k navigate · Backspace clears label</p>
       </div>
     </section>

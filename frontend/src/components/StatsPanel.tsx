@@ -1,11 +1,13 @@
 import type { Stats } from '../api'
-import { labelDisplayKey } from '../labels'
+import { labelName } from '../labels'
 
 type Props = {
   stats: Stats | null
+  activeLabels: number[]
+  labelNames: Record<string, string>
 }
 
-export function StatsPanel({ stats }: Props) {
+export function StatsPanel({ stats, activeLabels, labelNames }: Props) {
   if (!stats) return <p className="muted">Loading stats…</p>
 
   const maxCount = Math.max(1, ...Object.values(stats.per_label))
@@ -29,9 +31,12 @@ export function StatsPanel({ stats }: Props) {
 
       <h3>Per class</h3>
       <ul className="bar-list">
-        {Object.entries(stats.per_label).map(([lab, count]) => (
+        {[...activeLabels]
+          .sort((a, b) => a - b)
+          .map((lab) => [String(lab), stats.per_label[String(lab)] ?? 0] as const)
+          .map(([lab, count]) => (
           <li key={lab}>
-            <span className="bar-label">Key {labelDisplayKey(Number(lab))}</span>
+            <span className="bar-label">{labelName(Number(lab), labelNames)}</span>
             <div className="bar-track">
               <div className="bar-fill" style={{ width: `${(count / maxCount) * 100}%` }} />
             </div>

@@ -17,6 +17,8 @@ type Props = {
   onRecomputeUmap: () => void
   onTrain: () => void
   onSelectImage: (id: number) => void
+  activeLabels: number[]
+  labelNames: Record<string, string>
 }
 
 export function RightPanel({
@@ -32,6 +34,8 @@ export function RightPanel({
   onRecomputeUmap,
   onTrain,
   onSelectImage,
+  activeLabels,
+  labelNames,
 }: Props) {
   return (
     <section className="panel right-panel">
@@ -54,7 +58,7 @@ export function RightPanel({
           <p className="muted">Computing layout…</p>
         )}
       </div>
-      <StatsPanel stats={stats} />
+      <StatsPanel stats={stats} activeLabels={activeLabels} labelNames={labelNames} />
       <ConfigDrawer
         session={session}
         providers={providers}
