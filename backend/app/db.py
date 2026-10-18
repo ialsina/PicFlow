@@ -17,7 +17,12 @@ engine = create_engine(
     pool_pre_ping=True,
     connect_args={"connect_timeout": 5},
 )
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False,
+)
 
 
 def init_db() -> None:
