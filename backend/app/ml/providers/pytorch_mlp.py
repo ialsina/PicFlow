@@ -83,8 +83,12 @@ class PyTorchMLPProvider(SuggestionProvider):
 
         self._model = net
         ms = (time.perf_counter() - t0) * 1000
-        acc = self._simple_holdout_accuracy(X, y, hidden, epochs, lr, batch_size, config.random_state)
-        return TrainReport(success=True, message="PyTorch MLP trained", accuracy=acc, duration_ms=ms)
+        acc = self._simple_holdout_accuracy(
+            X, y, hidden, epochs, lr, batch_size, config.random_state
+        )
+        return TrainReport(
+            success=True, message="PyTorch MLP trained", accuracy=acc, duration_ms=ms
+        )
 
     def _simple_holdout_accuracy(
         self, X, y, hidden, epochs, lr, batch_size, random_state

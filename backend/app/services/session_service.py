@@ -186,6 +186,52 @@ def get_session(session_id: str) -> dict | None:
         }
 
 
+def list_sessions(limit: int = 50) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT s.*,
+                (SELECT COUNT(*) FROM images i WHERE i.session_id = s.id) AS total_images,
+                (SELECT COUNT(*) FROM images i WHERE i.session_id = s.id AND i.label IS NOT NULL)
+                    AS labeled_count
+            FROM sessions s
+            ORDER BY s.created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    out: list[dict] = []
+    for row in rows:
+        total = int(row["total_images"])
+        labeled = int(row["labeled_count"])
+        out.append(
+            {
+                "id": row["id"],
+                "image_root": row["image_root"],
+                "config": json.loads(row["config_json"]),
+                "index_status": row["index_status"],
+                "index_progress": row["index_progress"],
+                "index_message": row["index_message"],
+                "total_images": total,
+                "labeled_count": labeled,
+                "unlabeled_count": total - labeled,
+            }
+        )
+    return out
+
+
+def delete_session(session_id: str) -> bool:
+    rt = _runtime_states.get(session_id)
+    if rt is not None:
+        with rt.lock:
+            if rt.train_timer is not None:
+                rt.train_timer.cancel()
+        del _runtime_states[session_id]
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        return cur.rowcount > 0
+
+
 def get_status(session_id: str) -> dict | None:
     sess = get_session(session_id)
     if not sess:

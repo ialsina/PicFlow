@@ -12,7 +12,9 @@ def compute_pca(X: np.ndarray, n_components: int = 2) -> tuple[np.ndarray, list[
     return coords, ev
 
 
-def compute_umap(X: np.ndarray, n_components: int = 2, random_state: int = 42) -> np.ndarray:
+def compute_umap(
+    X: np.ndarray, n_components: int = 2, random_state: int = 42
+) -> np.ndarray:
     import umap
 
     reducer = umap.UMAP(
@@ -25,7 +27,9 @@ def compute_umap(X: np.ndarray, n_components: int = 2, random_state: int = 42) -
     return reducer.fit_transform(X)
 
 
-def compute_kmeans(X: np.ndarray, n_clusters: int, random_state: int = 42) -> np.ndarray:
+def compute_kmeans(
+    X: np.ndarray, n_clusters: int, random_state: int = 42
+) -> np.ndarray:
     n_clusters = min(n_clusters, len(X))
     if n_clusters < 1:
         return np.zeros(len(X), dtype=int)

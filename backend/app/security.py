@@ -12,14 +12,15 @@ def resolve_allowed_path(path: str | Path) -> Path:
     if not resolved.exists():
         raise HTTPException(status_code=400, detail=f"Path does not exist: {resolved}")
     if not resolved.is_dir():
-        raise HTTPException(status_code=400, detail=f"Path is not a directory: {resolved}")
+        raise HTTPException(
+            status_code=400, detail=f"Path is not a directory: {resolved}"
+        )
     roots = settings.allowed_root_paths()
-    if roots:
-        if not any(resolved == r or r in resolved.parents for r in roots):
-            raise HTTPException(
-                status_code=403,
-                detail="image_root is not under PICFLOW_ALLOWED_ROOTS",
-            )
+    if roots and not any(resolved == r or r in resolved.parents for r in roots):
+        raise HTTPException(
+            status_code=403,
+            detail="image_root is not under PICFLOW_ALLOWED_ROOTS",
+        )
     return resolved
 
 

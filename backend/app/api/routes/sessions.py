@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
-
 from app.schemas import (
     CreateSessionRequest,
     ImageDetail,
     ImageListResponse,
     PatchConfigRequest,
     ProjectionResponse,
+    SessionListResponse,
     SessionStatus,
     SessionSummary,
     SetLabelRequest,
@@ -17,6 +15,8 @@ from app.schemas import (
     TrainReport,
 )
 from app.services import session_service
+from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -30,12 +30,25 @@ def create_session(body: CreateSessionRequest):
     return SessionSummary(**sess)
 
 
+@router.get("", response_model=SessionListResponse)
+def list_sessions(limit: int = Query(50, ge=1, le=200)):
+    items = session_service.list_sessions(limit)
+    return SessionListResponse(items=[SessionSummary(**s) for s in items])
+
+
 @router.get("/{session_id}", response_model=SessionSummary)
 def get_session(session_id: str):
     sess = session_service.get_session(session_id)
     if not sess:
         raise HTTPException(404, "Session not found")
     return SessionSummary(**sess)
+
+
+@router.delete("/{session_id}", status_code=204)
+def delete_session(session_id: str):
+    if not session_service.delete_session(session_id):
+        raise HTTPException(404, "Session not found")
+    return Response(status_code=204)
 
 
 @router.get("/{session_id}/status", response_model=SessionStatus)
@@ -76,7 +89,9 @@ def get_image(session_id: str, image_id: int):
 
 
 @router.get("/{session_id}/images/{image_id}/file")
-def get_image_file(session_id: str, image_id: int, thumb: int | None = Query(None, ge=32, le=2048)):
+def get_image_file(
+    session_id: str, image_id: int, thumb: int | None = Query(None, ge=32, le=2048)
+):
     path = session_service.get_image_path(session_id, image_id)
     if not path:
         raise HTTPException(404, "Image not found")
@@ -104,13 +119,17 @@ def set_label(session_id: str, image_id: int, body: SetLabelRequest):
     return ImageDetail(**img)
 
 
-@router.get("/{session_id}/images/{image_id}/suggestion", response_model=SuggestionResponse)
+@router.get(
+    "/{session_id}/images/{image_id}/suggestion", response_model=SuggestionResponse
+)
 def get_suggestion(session_id: str, image_id: int):
     return SuggestionResponse(**session_service.get_suggestion(session_id, image_id))
 
 
 @router.get("/{session_id}/projection")
-def get_projection(session_id: str, method: str | None = Query(None, pattern="^(pca|umap)$")):
+def get_projection(
+    session_id: str, method: str | None = Query(None, pattern="^(pca|umap)$")
+):
     data = session_service.get_projection(session_id, method)
     if data is None:
         raise HTTPException(404, "Session not found")

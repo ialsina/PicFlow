@@ -34,29 +34,29 @@ class SuggestionProvider(ABC):
     display_name: str
 
     @abstractmethod
-    def config_schema(self) -> dict[str, Any]:
-        ...
+    def config_schema(self) -> dict[str, Any]: ...
 
     @abstractmethod
-    def fit(self, X: np.ndarray, y: np.ndarray, *, config: TrainConfig) -> TrainReport:
-        ...
+    def fit(
+        self, X: np.ndarray, y: np.ndarray, *, config: TrainConfig
+    ) -> TrainReport: ...
 
     @abstractmethod
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        ...
+    def predict(self, X: np.ndarray) -> np.ndarray: ...
 
     @abstractmethod
-    def predict_proba(self, X: np.ndarray) -> np.ndarray | None:
-        ...
+    def predict_proba(self, X: np.ndarray) -> np.ndarray | None: ...
 
     @property
     @abstractmethod
-    def is_ready(self) -> bool:
-        ...
+    def is_ready(self) -> bool: ...
 
 
 def check_training_ready(
-    y: np.ndarray, min_total: int, min_per_class: int, active_labels: list[int] | None = None
+    y: np.ndarray,
+    min_total: int,
+    min_per_class: int,
+    active_labels: list[int] | None = None,
 ) -> tuple[bool, str]:
     if len(y) < min_total:
         return False, f"Need at least {min_total} labeled images (have {len(y)})"
@@ -74,7 +74,9 @@ def check_training_ready(
     return True, "ok"
 
 
-def holdout_accuracy(clf, X: np.ndarray, y: np.ndarray, random_state: int = 42) -> float | None:
+def holdout_accuracy(
+    clf, X: np.ndarray, y: np.ndarray, random_state: int = 42
+) -> float | None:
     if len(y) < 10:
         return None
     from sklearn.model_selection import train_test_split

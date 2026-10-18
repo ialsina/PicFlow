@@ -22,6 +22,10 @@ class SessionSummary(BaseModel):
     unlabeled_count: int
 
 
+class SessionListResponse(BaseModel):
+    items: list[SessionSummary]
+
+
 class SessionStatus(BaseModel):
     index_status: str
     index_progress: float

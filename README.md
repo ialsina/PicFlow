@@ -54,7 +54,7 @@ See [`config.example.yaml`](config.example.yaml). Most values can be changed in 
 
 - Health: `GET /api/health`
 - Providers: `GET /api/providers`
-- Sessions: `POST /api/sessions`, `GET /api/sessions/{id}`, …
+- Sessions: `GET /api/sessions`, `POST /api/sessions`, `GET /api/sessions/{id}`, `DELETE /api/sessions/{id}`, …
 
 ## Docker (optional)
 

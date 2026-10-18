@@ -6,7 +6,12 @@ from typing import Any
 import numpy as np
 from sklearn.neural_network import MLPClassifier
 
-from app.ml.providers.base import SuggestionProvider, TrainConfig, TrainReport, holdout_accuracy
+from app.ml.providers.base import (
+    SuggestionProvider,
+    TrainConfig,
+    TrainReport,
+    holdout_accuracy,
+)
 
 
 class SklearnMLPProvider(SuggestionProvider):
@@ -50,7 +55,9 @@ class SklearnMLPProvider(SuggestionProvider):
         self._model.fit(X, y)
         acc = holdout_accuracy(template, X, y, config.random_state)
         ms = (time.perf_counter() - t0) * 1000
-        return TrainReport(success=True, message="MLP fitted", accuracy=acc, duration_ms=ms)
+        return TrainReport(
+            success=True, message="MLP fitted", accuracy=acc, duration_ms=ms
+        )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         if self._model is None:

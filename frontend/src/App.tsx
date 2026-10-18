@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createSession,
+  deleteSession,
   getImage,
   getImageIds,
   getProjection,
@@ -27,9 +28,7 @@ import { KEY_TO_LABEL } from './labels'
 import './App.css'
 
 function App() {
-  const [sessionId, setSessionId] = useState<string | null>(
-    () => localStorage.getItem('picflow_session_id'),
-  )
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const [session, setSession] = useState<SessionSummary | null>(null)
   const [status, setStatus] = useState<SessionStatus | null>(null)
   const [imageIds, setImageIds] = useState<number[]>([])
@@ -43,9 +42,33 @@ function App() {
   const [configOpen, setConfigOpen] = useState(false)
   const [startLoading, setStartLoading] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
+  const [sessionListKey, setSessionListKey] = useState(0)
   const pollRef = useRef<number | null>(null)
 
   const currentId = imageIds[cursor] ?? null
+
+  const resetClientSession = useCallback(() => {
+    localStorage.removeItem('picflow_session_id')
+    setSessionId(null)
+    setSession(null)
+    setStatus(null)
+    setImageIds([])
+    setCursor(0)
+    setImage(null)
+    setSuggestion(null)
+    setProjection(null)
+    setStats(null)
+    setUnlabeledOnly(false)
+    setConfigOpen(false)
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  const bumpSessionList = useCallback(() => {
+    setSessionListKey((k) => k + 1)
+  }, [])
 
   const refreshIds = useCallback(async (sid: string, unlabeled: boolean) => {
     const { items } = await getImageIds(sid, unlabeled)
@@ -84,12 +107,22 @@ function App() {
     let cancelled = false
 
     async function bootstrap() {
-      const sess = await getSession(sessionId!)
-      if (cancelled) return
-      setSession(sess)
-      await refreshIds(sessionId!, unlabeledOnly)
-      await refreshStats(sessionId!)
-      await refreshProjection(sessionId!)
+      try {
+        const sess = await getSession(sessionId!)
+        if (cancelled) return
+        setSession(sess)
+        localStorage.setItem('picflow_session_id', sessionId!)
+        await refreshIds(sessionId!, unlabeledOnly)
+        await refreshStats(sessionId!)
+        await refreshProjection(sessionId!)
+      } catch (e) {
+        if (cancelled) return
+        resetClientSession()
+        setStartError(
+          e instanceof Error ? e.message : 'Session not found or unavailable.',
+        )
+        bumpSessionList()
+      }
     }
 
     bootstrap().catch(console.error)
@@ -116,22 +149,57 @@ function App() {
       cancelled = true
       if (pollRef.current) window.clearInterval(pollRef.current)
     }
-  }, [sessionId, unlabeledOnly, refreshIds, refreshProjection, refreshStats])
+  }, [
+    sessionId,
+    unlabeledOnly,
+    refreshIds,
+    refreshProjection,
+    refreshStats,
+    resetClientSession,
+    bumpSessionList,
+  ])
 
   useEffect(() => {
     if (!sessionId || currentId == null) return
     loadCurrentImage(sessionId, currentId).catch(console.error)
   }, [sessionId, currentId, loadCurrentImage])
 
+  function handleRecover(id: string) {
+    setStartError(null)
+    setSessionId(id)
+  }
+
+  function handleEndSession() {
+    resetClientSession()
+    bumpSessionList()
+  }
+
+  async function handleRemoveSession(id: string) {
+    const msg =
+      'Permanently delete this session and all labels? This cannot be undone.'
+    if (!window.confirm(msg)) return
+    setStartError(null)
+    try {
+      await deleteSession(id)
+      if (sessionId === id) {
+        resetClientSession()
+      }
+      bumpSessionList()
+    } catch (e) {
+      setStartError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   async function handleStart(imageRoot: string) {
     setStartLoading(true)
     setStartError(null)
     try {
       const sess = await createSession(imageRoot)
-      localStorage.setItem('picflow_session_id', sess.id)
       setSessionId(sess.id)
       setSession(sess)
+      localStorage.setItem('picflow_session_id', sess.id)
       setCursor(0)
+      bumpSessionList()
     } catch (e) {
       setStartError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -200,7 +268,14 @@ function App() {
 
   if (!sessionId || !session) {
     return (
-      <SessionStart onStart={handleStart} loading={startLoading} error={startError} />
+      <SessionStart
+        onStart={handleStart}
+        onRecover={handleRecover}
+        onRemove={handleRemoveSession}
+        listKey={sessionListKey}
+        loading={startLoading}
+        error={startError}
+      />
     )
   }
 
@@ -214,6 +289,7 @@ function App() {
         suggestion={suggestion}
         status={status}
         unlabeledOnly={unlabeledOnly}
+        onEndSession={handleEndSession}
         onToggleUnlabeled={() => {
           setUnlabeledOnly((v) => !v)
           if (sessionId) refreshIds(sessionId, !unlabeledOnly).catch(console.error)

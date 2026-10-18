@@ -10,6 +10,7 @@ type Props = {
   status: SessionStatus | null
   unlabeledOnly: boolean
   onToggleUnlabeled: () => void
+  onEndSession: () => void
   onPrev: () => void
   onNext: () => void
   onAcceptSuggestion: () => void
@@ -24,6 +25,7 @@ export function LeftPanel({
   status,
   unlabeledOnly,
   onToggleUnlabeled,
+  onEndSession,
   onPrev,
   onNext,
   onAcceptSuggestion,
@@ -50,6 +52,9 @@ export function LeftPanel({
           </span>
         </div>
         <div className="nav-buttons">
+          <button type="button" className="end-session" onClick={onEndSession}>
+            End session
+          </button>
           <label className="checkbox">
             <input type="checkbox" checked={unlabeledOnly} onChange={onToggleUnlabeled} />
             Unlabeled only

@@ -6,6 +6,9 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
     const text = await res.text()
     throw new Error(text || res.statusText)
   }
+  if (res.status === 204) {
+    return undefined as T
+  }
   return res.json() as Promise<T>
 }
 
@@ -90,6 +93,14 @@ export function createSession(imageRoot: string, config?: Record<string, unknown
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ image_root: imageRoot, config }),
   })
+}
+
+export function listSessions(limit = 50) {
+  return json<{ items: SessionSummary[] }>(`${BASE}/sessions?limit=${limit}`)
+}
+
+export function deleteSession(sessionId: string) {
+  return json<void>(`${BASE}/sessions/${sessionId}`, { method: 'DELETE' })
 }
 
 export function getSession(sessionId: string) {

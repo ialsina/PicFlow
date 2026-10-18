@@ -6,7 +6,12 @@ from typing import Any
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 
-from app.ml.providers.base import SuggestionProvider, TrainConfig, TrainReport, holdout_accuracy
+from app.ml.providers.base import (
+    SuggestionProvider,
+    TrainConfig,
+    TrainReport,
+    holdout_accuracy,
+)
 
 
 class KNNProvider(SuggestionProvider):
@@ -31,9 +36,13 @@ class KNNProvider(SuggestionProvider):
         self._model = KNeighborsClassifier(n_neighbors=n_neighbors)
         self._model.fit(X, y)
         self._classes = self._model.classes_
-        acc = holdout_accuracy(KNeighborsClassifier(n_neighbors=n_neighbors), X, y, config.random_state)
+        acc = holdout_accuracy(
+            KNeighborsClassifier(n_neighbors=n_neighbors), X, y, config.random_state
+        )
         ms = (time.perf_counter() - t0) * 1000
-        return TrainReport(success=True, message="kNN fitted", accuracy=acc, duration_ms=ms)
+        return TrainReport(
+            success=True, message="kNN fitted", accuracy=acc, duration_ms=ms
+        )
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         if self._model is None:
