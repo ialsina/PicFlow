@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: picflow
+      POSTGRES_PASSWORD: picflow
+      POSTGRES_DB: picflow
+    ports:
+      - "${PICFLOW_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - picflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U picflow -d picflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -8,9 +24,12 @@ services:
     environment:
       PICFLOW_ALLOWED_ROOTS: /data/images
       PICFLOW_CORS_ORIGINS: http://localhost:5173
+      PICFLOW_DATABASE_URL: postgresql+psycopg://picflow:picflow@postgres:5432/picflow
     volumes:
-      - ./backend/data:/app/data
       - ${PICFLOW_IMAGE_MOUNT:-./sample-images}:/data/images:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
@@ -22,3 +41,6 @@ services:
       API_PROXY_TARGET: http://backend:8000
     depends_on:
       - backend
+
+volumes:
+  picflow_pgdata:

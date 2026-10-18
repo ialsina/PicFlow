@@ -6,8 +6,15 @@ Interactive image labeling: keyboard classes (`1`–`9`, `0`), RGB histogram fea
 
 - Python 3.12+
 - Node.js 20+
+- PostgreSQL 16+ (or use Docker Compose below)
 
 ## Backend
+
+Start PostgreSQL (example with Docker):
+
+```bash
+docker compose up -d postgres
+```
 
 ```bash
 cd backend
@@ -15,9 +22,15 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
+# Default: postgresql+psycopg://picflow:picflow@localhost:5432/picflow
+export PICFLOW_DATABASE_URL=postgresql+psycopg://picflow:picflow@localhost:5432/picflow
+
 # Restrict which folders may be used as image roots (comma-separated absolute paths).
 # Leave unset to allow any path (local dev only).
 export PICFLOW_ALLOWED_ROOTS=/path/to/your/photos
+
+# Apply schema migrations (also runs automatically on API startup)
+alembic upgrade head
 
 uvicorn app.main:app --reload --port 8000
 ```
@@ -65,4 +78,4 @@ PICFLOW_IMAGE_MOUNT=/path/to/photos docker compose up --build
 
 Use **`/data/images`** (or a subfolder) as the image root in the UI — that path is inside the backend container, not on the host.
 
-[`docker-compose.yml`](docker-compose.yml) sets `API_PROXY_TARGET=http://backend:8000` so the Vite dev server in the frontend container can reach the API. Local `npm run dev` still proxies to `127.0.0.1:8000` by default.
+[`docker-compose.yml`](docker-compose.yml) runs PostgreSQL, the API, and the frontend. The backend uses `PICFLOW_DATABASE_URL` to reach the `postgres` service and applies Alembic migrations on startup. `API_PROXY_TARGET=http://backend:8000` lets the Vite dev server in the frontend container reach the API. Local `npm run dev` still proxies to `127.0.0.1:8000` by default.

@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     )
 
     data_dir: Path = Field(default=Path("data"))
+    database_url: str = Field(
+        default="postgresql+psycopg://picflow:picflow@localhost:5432/picflow",
+        description="SQLAlchemy database URL (PostgreSQL)",
+    )
     allowed_roots: str = Field(
         default="",
         description="Comma-separated absolute paths allowed for image_root",

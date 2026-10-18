@@ -3,6 +3,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini .
 ENV PICFLOW_DATA_DIR=/app/data
 RUN mkdir -p /app/data
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
