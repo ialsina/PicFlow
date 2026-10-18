@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import threading
 import time
 import uuid
@@ -11,11 +12,25 @@ import numpy as np
 
 from app.config import default_session_config, merge_config
 from app.db import get_conn, init_db
-from app.ml.features import extract_rgb_histogram, is_rgb_image_path
+from app.ml.features import collect_rgb_image_paths, extract_rgb_histogram
 from app.ml.projection import compute_kmeans, compute_pca, compute_umap
 from app.ml.providers.base import TrainConfig, check_training_ready
 from app.ml.providers.registry import create_provider
 from app.security import assert_file_under_root, resolve_allowed_path
+
+# Errors from DB, JSON config, NumPy/sklearn/torch, and optional deps (e.g. umap).
+_ML_PIPELINE_ERRORS: tuple[type[BaseException], ...] = (
+    sqlite3.Error,
+    json.JSONDecodeError,
+    ArithmeticError,
+    ImportError,
+    IndexError,
+    MemoryError,
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 
 
 @dataclass
@@ -82,22 +97,21 @@ def create_session(image_root: str, config_overrides: dict | None) -> str:
             """,
             (session_id, str(root), json.dumps(config), time.time()),
         )
-    thread = threading.Thread(target=_index_session, args=(session_id, root), daemon=True)
+    thread = threading.Thread(
+        target=_index_session, args=(session_id, root), daemon=True
+    )
     thread.start()
     return session_id
 
 
 def _index_session(session_id: str, root: Path) -> None:
-    paths: list[Path] = []
-    for dir_path, _dirnames, filenames in root.walk():
-        for name in filenames:
-            paths.append(dir_path / name)
-    paths.sort()
-    rgb_paths = [p for p in paths if is_rgb_image_path(p)]
+    rgb_paths = collect_rgb_image_paths(root)
     total = len(rgb_paths)
     config = default_session_config()
     with get_conn() as conn:
-        row = conn.execute("SELECT config_json FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        row = conn.execute(
+            "SELECT config_json FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
         if row:
             config = json.loads(row["config_json"])
     bins = int(config.get("histogram_bins", 18))
@@ -114,7 +128,13 @@ def _index_session(session_id: str, root: Path) -> None:
                 INSERT OR REPLACE INTO images (session_id, path, mtime, idx, features)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (session_id, str(path), mtime, indexed, feat.astype(np.float64).tobytes()),
+                (
+                    session_id,
+                    str(path),
+                    mtime,
+                    indexed,
+                    feat.astype(np.float64).tobytes(),
+                ),
             )
             indexed += 1
             if total and (i + 1) % max(1, total // 50) == 0:
@@ -141,7 +161,9 @@ def _index_session(session_id: str, root: Path) -> None:
 
 def get_session(session_id: str) -> dict | None:
     with get_conn() as conn:
-        row = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
         if not row:
             return None
         labeled = conn.execute(
@@ -190,9 +212,9 @@ def list_images(
     if unlabeled_only:
         where += " AND label IS NULL"
     with get_conn() as conn:
-        total = conn.execute(f"SELECT COUNT(*) AS c FROM images WHERE {where}", params).fetchone()[
-            "c"
-        ]
+        total = conn.execute(
+            f"SELECT COUNT(*) AS c FROM images WHERE {where}", params
+        ).fetchone()["c"]
         rows = conn.execute(
             f"""
             SELECT id, idx, path, label, label_source FROM images
@@ -280,10 +302,14 @@ def _schedule_train(session_id: str) -> None:
 
 
 def _schedule_projection(session_id: str) -> None:
-    threading.Thread(target=_recompute_projection, args=(session_id, "pca"), daemon=True).start()
+    threading.Thread(
+        target=_recompute_projection, args=(session_id, "pca"), daemon=True
+    ).start()
 
 
-def _labeled_xy(conn, session_id: str, config: dict) -> tuple[np.ndarray, np.ndarray] | None:
+def _labeled_xy(
+    conn, session_id: str, config: dict
+) -> tuple[np.ndarray, np.ndarray] | None:
     rows = conn.execute(
         """
         SELECT features, label FROM images
@@ -313,7 +339,9 @@ def _train(session_id: str) -> None:
         rt.training_message = "Training..."
     try:
         with get_conn() as conn:
-            row = conn.execute("SELECT config_json FROM sessions WHERE id = ?", (session_id,)).fetchone()
+            row = conn.execute(
+                "SELECT config_json FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
             if not row:
                 return
             config = json.loads(row["config_json"])
@@ -346,7 +374,7 @@ def _train(session_id: str) -> None:
                 rt.training_message = report.message
                 rt.last_train_ms = report.duration_ms
                 rt.holdout_accuracy = report.accuracy
-    except Exception as e:
+    except _ML_PIPELINE_ERRORS as e:
         with rt.lock:
             rt.training_status = "error"
             rt.training_message = str(e)
@@ -398,7 +426,7 @@ def get_suggestion(session_id: str, image_id: int) -> dict:
             "confidence": conf,
             "provider": provider_id,
         }
-    except Exception as e:
+    except _ML_PIPELINE_ERRORS as e:
         return {"ready": False, "reason": str(e), "provider": provider_id}
 
 
@@ -409,7 +437,9 @@ def _recompute_projection(session_id: str, method: str = "pca") -> None:
         rt.projection_message = f"Computing {method.upper()}..."
     try:
         with get_conn() as conn:
-            row = conn.execute("SELECT config_json FROM sessions WHERE id = ?", (session_id,)).fetchone()
+            row = conn.execute(
+                "SELECT config_json FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
             config = json.loads(row["config_json"]) if row else default_session_config()
             X, meta = _feature_matrix(conn, session_id)
             if len(X) == 0:
@@ -423,7 +453,11 @@ def _recompute_projection(session_id: str, method: str = "pca") -> None:
             else:
                 coords, ev = compute_pca(X)
             n_clusters = len(config.get("active_labels", list(range(10))))
-            kmeans = compute_kmeans(X, n_clusters) if config.get("show_kmeans_overlay") else None
+            kmeans = (
+                compute_kmeans(X, n_clusters)
+                if config.get("show_kmeans_overlay")
+                else None
+            )
             with rt.lock:
                 rt.projection_coords = coords
                 rt.projection_method = method
@@ -432,7 +466,7 @@ def _recompute_projection(session_id: str, method: str = "pca") -> None:
                 rt._projection_meta = meta
                 rt.projection_status = "done"
                 rt.projection_message = f"{method.upper()} ready"
-    except Exception as e:
+    except _ML_PIPELINE_ERRORS as e:
         with rt.lock:
             rt.projection_status = "error"
             rt.projection_message = str(e)
@@ -458,7 +492,12 @@ def get_projection(session_id: str, method: str | None = None) -> dict | None:
             threading.Thread(
                 target=_recompute_projection, args=(session_id, "pca"), daemon=True
             ).start()
-            return {"points": [], "method": "pca", "explained_variance": None, "pending": True}
+            return {
+                "points": [],
+                "method": "pca",
+                "explained_variance": None,
+                "pending": True,
+            }
         coords = rt.projection_coords
         meta = getattr(rt, "_projection_meta", [])
         kmeans = rt.kmeans_labels
@@ -492,7 +531,9 @@ def get_stats(session_id: str) -> dict | None:
         for r in rows:
             per_label[str(r["label"])] = r["c"]
     with rt.lock:
-        model_ready = rt.provider is not None and getattr(rt.provider, "is_ready", False)
+        model_ready = rt.provider is not None and getattr(
+            rt.provider, "is_ready", False
+        )
         return {
             "total": sess["total_images"],
             "labeled": sess["labeled_count"],
@@ -540,7 +581,9 @@ def list_image_ids(session_id: str, unlabeled_only: bool = False) -> list[dict] 
     return [{"id": r["id"], "idx": r["idx"], "label": r["label"]} for r in rows]
 
 
-def find_image_by_idx(session_id: str, idx: int, unlabeled_only: bool = False) -> int | None:
+def find_image_by_idx(
+    session_id: str, idx: int, unlabeled_only: bool = False
+) -> int | None:
     where = "session_id = ? AND idx = ?"
     params: list = [session_id, idx]
     if unlabeled_only:

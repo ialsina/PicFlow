@@ -4,7 +4,7 @@ Interactive image labeling: keyboard classes (`1`–`9`, `0`), RGB histogram fea
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - Node.js 20+
 
 ## Backend

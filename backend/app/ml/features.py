@@ -6,11 +6,15 @@ import numpy as np
 from PIL import Image
 
 
-def image_histogram(img: Image.Image | np.ndarray, bins: np.ndarray | None = None) -> np.ndarray:
+def image_histogram(
+    img: Image.Image | np.ndarray, bins: np.ndarray | None = None
+) -> np.ndarray:
     if bins is None:
         bins = np.linspace(0, 255.0, 18)
     arr = np.asarray(img)
-    return np.array([np.histogram(arr[..., i], bins=bins)[0] for i in range(arr.shape[-1])])
+    return np.array(
+        [np.histogram(arr[..., i], bins=bins)[0] for i in range(arr.shape[-1])]
+    )
 
 
 def extract_rgb_histogram(path: Path, histogram_bins: int = 18) -> np.ndarray | None:
@@ -32,3 +36,17 @@ def is_rgb_image_path(path: Path) -> bool:
             return len(shape) == 3 and shape[-1] == 3
     except OSError:
         return False
+
+
+def collect_file_paths_recursive(root: Path) -> list[Path]:
+    """All files under root, including nested directories."""
+    paths: list[Path] = []
+    for dir_path, _dirnames, filenames in root.walk():
+        for name in filenames:
+            paths.append(dir_path / name)
+    paths.sort()
+    return paths
+
+
+def collect_rgb_image_paths(root: Path) -> list[Path]:
+    return [p for p in collect_file_paths_recursive(root) if is_rgb_image_path(p)]
