@@ -1,0 +1,27 @@
+# PicFlow labeling app — example defaults (also configurable via API / UI)
+
+histogram_bins: 18
+min_labeled_total: 30
+min_labeled_per_class: 3
+suggestion_provider: sklearn_mlp  # knn | sklearn_mlp | pytorch_mlp
+label_slots: 10
+active_labels: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+sklearn_mlp:
+  max_iter: 200
+  hidden_layer_sizes: [128, 64]
+
+knn:
+  n_neighbors: 5
+
+pytorch_mlp:
+  epochs: 50
+  lr: 0.001
+  batch_size: 32
+  hidden: [128, 64]
+
+projection:
+  default: pca
+  umap_min_labeled_for_auto: 100
+
+show_kmeans_overlay: false
