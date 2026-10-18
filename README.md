@@ -23,6 +23,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # Default: postgresql+psycopg://picflow:picflow@localhost:5432/picflow
+# If compose maps Postgres to another host port (PICFLOW_POSTGRES_PORT), match it here:
 export PICFLOW_DATABASE_URL=postgresql+psycopg://picflow:picflow@localhost:5432/picflow
 
 # Restrict which folders may be used as image roots (comma-separated absolute paths).
