@@ -17,6 +17,26 @@ services:
       timeout: 5s
       retries: 5
 
+  ml-service:
+    profiles: ["ml"]
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    environment:
+      PICFLOW_ML_API_KEY: ${PICFLOW_ML_API_KEY:-dev-local-key}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/v1/health', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   backend:
     build:
       context: ./backend
@@ -26,14 +46,18 @@ services:
     environment:
       PICFLOW_ALLOWED_ROOTS: /data/images
       PICFLOW_CORS_ORIGINS: http://localhost:5173
-      # Do not use PICFLOW_POSTGRES_PORT here — Postgres always listens on 5432
-      # inside the container. Port 5434 (or similar) is only for localhost access.
       PICFLOW_DATABASE_URL: postgresql+psycopg://picflow:picflow@postgres:5432/picflow
+      PICFLOW_ML_ENABLED: ${PICFLOW_ML_ENABLED:-true}
+      PICFLOW_ML_BASE_URL: ${PICFLOW_ML_BASE_URL:-http://ml-service:8001}
+      PICFLOW_ML_API_KEY: ${PICFLOW_ML_API_KEY:-dev-local-key}
     volumes:
       - ${PICFLOW_IMAGE_MOUNT:-./sample-images}:/data/images:ro
     depends_on:
       postgres:
         condition: service_healthy
+      ml-service:
+        condition: service_healthy
+        required: false
     healthcheck:
       test:
         [

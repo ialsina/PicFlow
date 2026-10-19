@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
 
-from app.ml.providers.base import (
+from app.providers.base import (
     SuggestionProvider,
     TrainConfig,
     TrainReport,
@@ -20,7 +20,6 @@ class KNNProvider(SuggestionProvider):
 
     def __init__(self) -> None:
         self._model: KNeighborsClassifier | None = None
-        self._classes: np.ndarray | None = None
 
     def config_schema(self) -> dict[str, Any]:
         return {"n_neighbors": {"type": "integer", "default": 5, "minimum": 1}}
@@ -35,7 +34,6 @@ class KNNProvider(SuggestionProvider):
         n_neighbors = min(n_neighbors, max(1, len(y) - 1))
         self._model = KNeighborsClassifier(n_neighbors=n_neighbors)
         self._model.fit(X, y)
-        self._classes = self._model.classes_
         acc = holdout_accuracy(
             KNeighborsClassifier(n_neighbors=n_neighbors), X, y, config.random_state
         )

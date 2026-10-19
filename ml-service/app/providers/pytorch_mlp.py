@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from app.ml.providers.base import SuggestionProvider, TrainConfig, TrainReport
+from app.providers.base import SuggestionProvider, TrainConfig, TrainReport
 
 
 class PyTorchMLPProvider(SuggestionProvider):

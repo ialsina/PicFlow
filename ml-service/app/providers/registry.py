@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from app.ml.providers.base import SuggestionProvider
-from app.ml.providers.knn import KNNProvider
-from app.ml.providers.pytorch_mlp import PyTorchMLPProvider
-from app.ml.providers.sklearn_mlp import SklearnMLPProvider
+from app.providers.base import SuggestionProvider
+from app.providers.knn import KNNProvider
+from app.providers.pytorch_mlp import PyTorchMLPProvider
+from app.providers.sklearn_mlp import SklearnMLPProvider
 
 _PROVIDERS: dict[str, type[SuggestionProvider]] = {
     KNNProvider.id: KNNProvider,

@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 from sklearn.neural_network import MLPClassifier
 
-from app.ml.providers.base import (
+from app.providers.base import (
     SuggestionProvider,
     TrainConfig,
     TrainReport,

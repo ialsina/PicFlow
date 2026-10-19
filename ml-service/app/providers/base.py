@@ -8,12 +8,6 @@ import numpy as np
 
 
 @dataclass
-class ProviderRequirements:
-    min_labeled_total: int = 30
-    min_labeled_per_class: int = 3
-
-
-@dataclass
 class TrainConfig:
     provider_config: dict[str, Any] = field(default_factory=dict)
     min_labeled_total: int = 30
@@ -50,28 +44,6 @@ class SuggestionProvider(ABC):
     @property
     @abstractmethod
     def is_ready(self) -> bool: ...
-
-
-def check_training_ready(
-    y: np.ndarray,
-    min_total: int,
-    min_per_class: int,
-    active_labels: list[int] | None = None,
-) -> tuple[bool, str]:
-    if len(y) < min_total:
-        return False, f"Need at least {min_total} labeled images (have {len(y)})"
-    labels, counts = np.unique(y, return_counts=True)
-    if active_labels is not None:
-        for lab in active_labels:
-            if lab not in labels:
-                return False, f"Label {lab} has no examples yet"
-            idx = np.where(labels == lab)[0]
-            if counts[idx[0]] < min_per_class:
-                return False, f"Label {lab} needs at least {min_per_class} examples"
-    else:
-        if np.min(counts) < min_per_class:
-            return False, f"Each class needs at least {min_per_class} examples"
-    return True, "ok"
 
 
 def holdout_accuracy(

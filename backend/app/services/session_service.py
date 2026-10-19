@@ -18,11 +18,10 @@ from sqlalchemy.orm import Session
 from app.config import default_session_config, merge_config
 from app.db import get_db
 from app.ml.features import extract_rgb_histogram, iter_files_recursive
-from app.ml.projection import compute_kmeans, compute_pca, compute_umap
-from app.ml.providers.base import TrainConfig, check_training_ready
-from app.ml.providers.registry import create_provider
+from app.ml.training import check_training_ready
 from app.models import Image, LabelingSession
 from app.security import assert_file_under_root, resolve_allowed_path
+from app.services import ml_client
 from app.services.label_io import (
     MAX_LABEL,
     MIN_LABEL,
@@ -39,6 +38,7 @@ from app.services.label_io import (
     relative_image_path,
     resolve_image_id,
 )
+from app.services.ml_client import MlServiceError, MlServiceUnavailable
 
 # Errors from DB, JSON config, NumPy/sklearn/torch, and optional deps (e.g. umap).
 _ML_PIPELINE_ERRORS: tuple[type[BaseException], ...] = (
@@ -48,6 +48,8 @@ _ML_PIPELINE_ERRORS: tuple[type[BaseException], ...] = (
     ImportError,
     IndexError,
     MemoryError,
+    MlServiceError,
+    MlServiceUnavailable,
     OSError,
     RuntimeError,
     TypeError,
@@ -57,7 +59,7 @@ _ML_PIPELINE_ERRORS: tuple[type[BaseException], ...] = (
 
 @dataclass
 class RuntimeState:
-    provider: object | None = None
+    model_id: str | None = None
     provider_id: str | None = None
     training_status: str = "idle"
     training_message: str = ""
@@ -329,7 +331,10 @@ def delete_session(session_id: str) -> bool:
         result = db.execute(
             delete(LabelingSession).where(LabelingSession.id == session_id)
         )
-        return result.rowcount > 0
+        deleted = result.rowcount > 0
+    if deleted:
+        ml_client.purge_session(session_id)
+    return deleted
 
 
 def get_status(session_id: str) -> dict | None:
@@ -501,26 +506,33 @@ def _train(session_id: str) -> None:
             provider_id = config.get("suggestion_provider", "sklearn_mlp")
             if data is None:
                 with rt.lock:
-                    rt.provider = None
+                    rt.model_id = None
                     rt.provider_id = provider_id
                     rt.training_status = "waiting"
                     rt.training_message = "Not enough labeled data yet"
                     rt.holdout_accuracy = None
                 return
+            if not ml_client.is_enabled():
+                with rt.lock:
+                    rt.model_id = None
+                    rt.provider_id = provider_id
+                    rt.training_status = "error"
+                    rt.training_message = "ML service is disabled"
+                    rt.holdout_accuracy = None
+                return
             X, y = data
-            provider = create_provider(provider_id)
             pc = config.get(provider_id, {})
-            report = provider.fit(
-                X,
-                y,
-                config=TrainConfig(
-                    provider_config=pc,
-                    min_labeled_total=int(config.get("min_labeled_total", 30)),
-                    min_labeled_per_class=int(config.get("min_labeled_per_class", 3)),
-                ),
+            report = ml_client.fit(
+                session_id,
+                provider_id,
+                X.tolist(),
+                y.tolist(),
+                provider_config=pc,
+                min_labeled_total=int(config.get("min_labeled_total", 30)),
+                min_labeled_per_class=int(config.get("min_labeled_per_class", 3)),
             )
             with rt.lock:
-                rt.provider = provider
+                rt.model_id = report.model_id if report.success else None
                 rt.provider_id = provider_id
                 rt.training_status = "done" if report.success else "error"
                 rt.training_message = report.message
@@ -548,9 +560,9 @@ def force_train(session_id: str) -> dict:
 def get_suggestion(session_id: str, image_id: int) -> dict:
     rt = _runtime(session_id)
     with rt.lock:
-        provider = rt.provider
+        model_id = rt.model_id
         provider_id = rt.provider_id
-        if provider is None or not getattr(provider, "is_ready", False):
+        if model_id is None:
             return {
                 "ready": False,
                 "reason": rt.training_message or "Model not ready",
@@ -569,11 +581,11 @@ def get_suggestion(session_id: str, image_id: int) -> dict:
         return {"ready": False, "reason": "Already labeled", "provider": provider_id}
     X = np.frombuffer(r.features, dtype=np.float64).reshape(1, -1)
     try:
-        pred = provider.predict(X)[0]
+        result = ml_client.predict(model_id, X.tolist())
+        pred = result.labels[0]
         conf = None
-        proba = provider.predict_proba(X)
-        if proba is not None:
-            conf = float(np.max(proba))
+        if result.proba is not None:
+            conf = float(np.max(result.proba[0]))
         return {
             "ready": True,
             "label": int(pred),
@@ -599,21 +611,37 @@ def _recompute_projection(session_id: str, method: str = "pca") -> None:
                     rt.projection_status = "idle"
                     rt.projection_message = "No features"
                 return
-            if method == "umap":
-                coords = compute_umap(X)
-                ev = None
-            else:
-                coords, ev = compute_pca(X)
+            if not ml_client.is_enabled():
+                with rt.lock:
+                    rt.projection_status = "error"
+                    rt.projection_message = "ML service is disabled"
+                return
             n_clusters = len(config.get("active_labels", list(range(10))))
+            proj_meta = [
+                {"id": m["id"], "idx": m["idx"], "label": m["label"]} for m in meta
+            ]
+            image_ids = [m["id"] for m in meta]
+            result = ml_client.project(
+                session_id,
+                method=method,
+                X=X.tolist(),
+                image_ids=image_ids,
+                meta=proj_meta,
+                n_clusters=n_clusters,
+                show_kmeans_overlay=bool(config.get("show_kmeans_overlay")),
+            )
+            coords = np.array(
+                [[p["x"], p["y"]] for p in result.points], dtype=np.float64
+            )
             kmeans = (
-                compute_kmeans(X, n_clusters)
-                if config.get("show_kmeans_overlay")
+                np.array(result.kmeans_labels, dtype=int)
+                if result.kmeans_labels is not None
                 else None
             )
             with rt.lock:
                 rt.projection_coords = coords
                 rt.projection_method = method
-                rt.explained_variance = ev
+                rt.explained_variance = result.explained_variance
                 rt.kmeans_labels = kmeans
                 rt._projection_meta = meta
                 rt.projection_status = "done"
@@ -684,9 +712,7 @@ def get_stats(session_id: str) -> dict | None:
         for label, count in rows:
             per_label[str(label)] = count
     with rt.lock:
-        model_ready = rt.provider is not None and getattr(
-            rt.provider, "is_ready", False
-        )
+        model_ready = rt.model_id is not None
         return {
             "total": sess["total_images"],
             "labeled": sess["labeled_count"],
@@ -842,7 +868,7 @@ def import_labels(
             rt = _runtime(session_id)
             with rt.lock:
                 if rt.provider_id != merged.get("suggestion_provider"):
-                    rt.provider = None
+                    rt.model_id = None
         elif updates and active_changed:
             merged = merge_config(config, {"active_labels": new_active})
             with get_db() as db:
@@ -910,7 +936,7 @@ def patch_config(session_id: str, overrides: dict) -> dict | None:
     rt = _runtime(session_id)
     with rt.lock:
         if rt.provider_id != config.get("suggestion_provider"):
-            rt.provider = None
+            rt.model_id = None
     _schedule_train(session_id)
     return config
 

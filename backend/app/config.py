@@ -28,6 +28,23 @@ class Settings(BaseSettings):
     min_labeled_per_class: int = 3
     suggestion_provider: str = "sklearn_mlp"
     train_debounce_ms: int = 400
+    ml_enabled: bool = Field(
+        default=True,
+        description="When false, skip train/suggest/projection calls to ml-service",
+    )
+    ml_base_url: str = Field(
+        default="http://127.0.0.1:8001",
+        description="Base URL of PicFlow ml-service (no trailing slash)",
+    )
+    ml_api_key: str = Field(default="", description="Bearer token for ml-service")
+    ml_timeout_s: float = Field(default=120.0, description="Default HTTP timeout")
+    ml_fit_timeout_s: float = Field(
+        default=300.0, description="Timeout for model fit requests"
+    )
+    ml_predict_timeout_s: float = Field(
+        default=30.0, description="Timeout for predict requests"
+    )
+    ml_tls_verify: bool = Field(default=True, description="Verify TLS for ml_base_url")
 
     def allowed_root_paths(self) -> list[Path]:
         if not self.allowed_roots.strip():

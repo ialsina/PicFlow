@@ -14,6 +14,7 @@ from app.api.routes import config, providers, sessions
 from app.config import settings
 from app.database_errors import database_unavailable_detail
 from app.db import engine, init_db
+from app.services import ml_client
 
 logger = logging.getLogger(__name__)
 
@@ -60,4 +61,5 @@ def health():
             status_code=503,
             detail=database_unavailable_detail(exc),
         ) from exc
-    return {"status": "ok"}
+    ml_ok = ml_client.check_health() if settings.ml_enabled else None
+    return {"status": "ok", "ml_reachable": ml_ok}
