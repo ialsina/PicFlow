@@ -184,3 +184,34 @@ export function patchConfig(sessionId: string, config: Record<string, unknown>) 
 export function listProviders() {
   return json<ProviderInfo[]>(`${BASE}/providers`)
 }
+
+export type LabelImportResult = {
+  applied: number
+  skipped_unknown: number
+  skipped_ambiguous: number
+  skipped_invalid: number
+  errors: string[]
+  config_updated: boolean
+}
+
+export async function exportLabels(sessionId: string): Promise<void> {
+  const res = await fetch(`${BASE}/sessions/${sessionId}/labels/export`)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(errorMessageFromBody(text, res.statusText))
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `picflow-${sessionId}-labels.zip`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+export function importLabels(sessionId: string, formData: FormData) {
+  return json<LabelImportResult>(`${BASE}/sessions/${sessionId}/labels/import`, {
+    method: 'POST',
+    body: formData,
+  })
+}

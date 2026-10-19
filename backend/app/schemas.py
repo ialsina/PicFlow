@@ -122,3 +122,12 @@ class ProviderInfo(BaseModel):
 
 class PatchConfigRequest(BaseModel):
     config: dict[str, Any]
+
+
+class LabelImportResult(BaseModel):
+    applied: int
+    skipped_unknown: int
+    skipped_ambiguous: int
+    skipped_invalid: int
+    errors: list[str] = Field(default_factory=list)
+    config_updated: bool = False

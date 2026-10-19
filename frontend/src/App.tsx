@@ -17,6 +17,7 @@ import {
   type Projection,
   type ProviderInfo,
   type SessionStatus,
+  type LabelImportResult,
   type SessionSummary,
   type Stats,
   type Suggestion,
@@ -221,6 +222,8 @@ function App() {
     if (unlabeledOnly && label != null) {
       await refreshIds(sessionId, true)
       setCursor((c) => Math.min(c, Math.max(0, imageIds.length - 2)))
+    } else if (label != null) {
+      go(1)
     }
   }
 
@@ -298,6 +301,18 @@ function App() {
     setSession({ ...session, config })
   }
 
+  async function handleLabelsImported(_result: LabelImportResult) {
+    if (!sessionId) return
+    const sess = await getSession(sessionId)
+    setSession(sess)
+    await refreshIds(sessionId, unlabeledOnly)
+    await refreshStats(sessionId)
+    await refreshProjection(sessionId)
+    if (currentId != null) {
+      await loadCurrentImage(sessionId, currentId)
+    }
+  }
+
   async function handleRenameLabel(labelId: number, name: string) {
     if (!sessionId || !session) return
     const defaultName = `Class ${labelDisplayKey(labelId)}`
@@ -352,6 +367,7 @@ function App() {
         labelSlots={labelSlots}
         onAddLabel={() => handleAddLabel().catch(console.error)}
         onRenameLabel={(id, name) => handleRenameLabel(id, name).catch(console.error)}
+        onSelectLabel={(labelId) => applyLabel(labelId).catch(console.error)}
       />
       <RightPanel
         projection={projection}
@@ -365,6 +381,7 @@ function App() {
         onSaveConfig={handleSaveConfig}
         onRecomputeUmap={() => sessionId && refreshProjection(sessionId, 'umap')}
         onTrain={() => sessionId && trainSession(sessionId).then(() => refreshStats(sessionId!))}
+        onLabelsImported={(result) => handleLabelsImported(result)}
         onSelectImage={(id) => {
           const idx = imageIds.indexOf(id)
           if (idx >= 0) setCursor(idx)

@@ -297,6 +297,29 @@ body {
   min-width: 0;
 }
 
+.legend-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.25rem;
+  margin: -0.15rem -0.25rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.legend-pick-btn:hover {
+  background: #f0f7fc;
+}
+
+.legend-pick-btn:focus-visible {
+  outline: 2px solid #1f77b4;
+  outline-offset: 1px;
+}
+
 .legend-add-cell {
   justify-content: flex-end;
 }
@@ -477,4 +500,21 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 0.5rem;
+}
+
+.drawer-fieldset {
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0.5rem 0 0;
+}
+
+.drawer-fieldset legend {
+  padding: 0 0.35rem;
+  font-size: 0.9rem;
+}
+
+.drawer-hint {
+  font-size: 0.85rem;
+  margin: 0.35rem 0;
 }

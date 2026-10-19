@@ -5,6 +5,7 @@ import math
 import threading
 import time
 import uuid
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,6 +23,22 @@ from app.ml.providers.base import TrainConfig, check_training_ready
 from app.ml.providers.registry import create_provider
 from app.models import Image, LabelingSession
 from app.security import assert_file_under_root, resolve_allowed_path
+from app.services.label_io import (
+    MAX_LABEL,
+    MIN_LABEL,
+    LabelImportStats,
+    LabelNameRow,
+    build_export_zip,
+    build_label_names_csv,
+    build_labels_csv,
+    build_session_image_index,
+    default_label_name,
+    extract_zip_payloads,
+    parse_label_names_csv,
+    parse_labels_csv,
+    relative_image_path,
+    resolve_image_id,
+)
 
 # Errors from DB, JSON config, NumPy/sklearn/torch, and optional deps (e.g. umap).
 _ML_PIPELINE_ERRORS: tuple[type[BaseException], ...] = (
@@ -682,6 +699,201 @@ def get_stats(session_id: str) -> dict | None:
             "training_status": rt.training_status,
             "projection_method": rt.projection_method,
         }
+
+
+def export_labels_zip(session_id: str) -> bytes | None:
+    sess = get_session(session_id)
+    if not sess:
+        return None
+    image_root = Path(sess["image_root"])
+    config = sess["config"]
+    label_names: dict[str, str] = dict(config.get("label_names") or {})
+
+    with get_db() as db:
+        rows = db.execute(
+            select(Image.path, Image.label)
+            .where(Image.session_id == session_id, Image.label.is_not(None))
+            .order_by(Image.idx)
+        ).all()
+
+    export_rows: list[tuple[str, str, int]] = []
+    used_labels: set[int] = set()
+    for path, label in rows:
+        if label is None:
+            continue
+        rel = relative_image_path(image_root, path)
+        name = Path(path).name
+        export_rows.append((rel, name, int(label)))
+        used_labels.add(int(label))
+
+    labels_csv = build_labels_csv(export_rows)
+    names_csv = build_label_names_csv(label_names, used_labels)
+    return build_export_zip(labels_csv, names_csv)
+
+
+def import_labels(
+    session_id: str,
+    *,
+    labels_data: bytes,
+    label_names_data: bytes | None = None,
+) -> dict | None:
+    sess = get_session(session_id)
+    if not sess:
+        return None
+
+    stats = LabelImportStats()
+    try:
+        label_rows = parse_labels_csv(labels_data)
+    except ValueError as e:
+        stats.add_error(str(e))
+        stats.skipped_invalid += 1
+        return _import_result_dict(stats, config_updated=False)
+
+    name_rows: list[LabelNameRow] = []
+    if label_names_data:
+        try:
+            name_rows = parse_label_names_csv(label_names_data)
+        except ValueError as e:
+            stats.add_error(str(e))
+            stats.skipped_invalid += 1
+            return _import_result_dict(stats, config_updated=False)
+
+    image_root = Path(sess["image_root"])
+    with get_db() as db:
+        path_rows = db.execute(
+            select(Image.id, Image.path).where(Image.session_id == session_id)
+        ).all()
+
+    index = build_session_image_index(
+        image_root, [(int(r[0]), r[1]) for r in path_rows]
+    )
+
+    updates: dict[int, int] = {}
+    for i, row in enumerate(label_rows, start=1):
+        if row.label < MIN_LABEL or row.label > MAX_LABEL:
+            stats.skipped_invalid += 1
+            stats.add_error(f"Row {i}: label {row.label} out of range 0–9")
+            continue
+        resolved = resolve_image_id(row, index)
+        if resolved == "no_key":
+            stats.skipped_invalid += 1
+            stats.add_error(f"Row {i}: missing image_path and image_name")
+            continue
+        if resolved == "ambiguous":
+            stats.skipped_ambiguous += 1
+            stats.add_error(f"Row {i}: ambiguous image_name (duplicate basename)")
+            continue
+        if resolved == "unknown":
+            stats.skipped_unknown += 1
+            key = row.image_path or row.image_name or "?"
+            stats.add_error(f"Row {i}: image not found ({key})")
+            continue
+        updates[int(resolved)] = row.label
+
+    config_updated = False
+    if updates:
+        with get_db() as db:
+            for image_id, label in updates.items():
+                db.execute(
+                    update(Image)
+                    .where(Image.session_id == session_id, Image.id == image_id)
+                    .values(label=label, label_source="user")
+                )
+        stats.applied = len(updates)
+        _schedule_train(session_id)
+        _schedule_projection(session_id)
+
+    if name_rows or updates:
+        config = dict(sess["config"])
+        label_names = dict(config.get("label_names") or {})
+        active = list(config.get("active_labels") or [0, 1])
+        slots = int(config.get("label_slots", 10))
+        active_set = set(active)
+        for label_id in updates.values():
+            if label_id not in active_set and len(active_set) < slots:
+                active_set.add(label_id)
+        for nr in name_rows:
+            if nr.label < MIN_LABEL or nr.label > MAX_LABEL:
+                stats.skipped_invalid += 1
+                stats.add_error(f"label_names: label {nr.label} out of range 0–9")
+                continue
+            default = default_label_name(nr.label)
+            if nr.name.strip() == default:
+                label_names.pop(str(nr.label), None)
+            else:
+                label_names[str(nr.label)] = nr.name.strip()
+            if nr.label not in active_set and len(active_set) < slots:
+                active_set.add(nr.label)
+        new_active = sorted(active_set)
+        names_changed = label_names != config.get("label_names")
+        active_changed = new_active != config.get("active_labels")
+        if name_rows and (names_changed or active_changed):
+            merged = merge_config(
+                config,
+                {"label_names": label_names, "active_labels": new_active},
+            )
+            with get_db() as db:
+                db.execute(
+                    update(LabelingSession)
+                    .where(LabelingSession.id == session_id)
+                    .values(config_json=json.dumps(merged))
+                )
+            config_updated = True
+            rt = _runtime(session_id)
+            with rt.lock:
+                if rt.provider_id != merged.get("suggestion_provider"):
+                    rt.provider = None
+        elif updates and active_changed:
+            merged = merge_config(config, {"active_labels": new_active})
+            with get_db() as db:
+                db.execute(
+                    update(LabelingSession)
+                    .where(LabelingSession.id == session_id)
+                    .values(config_json=json.dumps(merged))
+                )
+            config_updated = True
+
+    return _import_result_dict(stats, config_updated=config_updated)
+
+
+def import_labels_from_upload(
+    session_id: str,
+    *,
+    labels_file: bytes | None,
+    label_names_file: bytes | None,
+    archive_file: bytes | None,
+) -> dict | None:
+    labels_data: bytes | None = labels_file
+    names_data: bytes | None = label_names_file
+    if archive_file:
+        try:
+            labels_data, names_from_zip = extract_zip_payloads(archive_file)
+        except (ValueError, zipfile.BadZipFile) as e:
+            stats = LabelImportStats()
+            stats.add_error(str(e))
+            stats.skipped_invalid += 1
+            return _import_result_dict(stats, config_updated=False)
+        if names_from_zip is not None:
+            names_data = names_from_zip
+    if not labels_data:
+        stats = LabelImportStats()
+        stats.add_error("No labels file provided")
+        stats.skipped_invalid += 1
+        return _import_result_dict(stats, config_updated=False)
+    return import_labels(
+        session_id, labels_data=labels_data, label_names_data=names_data
+    )
+
+
+def _import_result_dict(stats: LabelImportStats, config_updated: bool) -> dict:
+    return {
+        "applied": stats.applied,
+        "skipped_unknown": stats.skipped_unknown,
+        "skipped_ambiguous": stats.skipped_ambiguous,
+        "skipped_invalid": stats.skipped_invalid,
+        "errors": stats.errors,
+        "config_updated": config_updated,
+    }
 
 
 def patch_config(session_id: str, overrides: dict) -> dict | None:

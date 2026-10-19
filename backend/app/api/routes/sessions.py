@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from app.schemas import (
     CreateSessionRequest,
     ImageDetail,
     ImageListResponse,
+    LabelImportResult,
     PatchConfigRequest,
     ProjectionResponse,
     SessionListResponse,
@@ -15,8 +18,8 @@ from app.schemas import (
     TrainReport,
 )
 from app.services import session_service
-from fastapi import APIRouter, HTTPException, Query, Response
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -166,3 +169,43 @@ def patch_config(session_id: str, body: PatchConfigRequest):
     if cfg is None:
         raise HTTPException(404, "Session not found")
     return {"config": cfg}
+
+
+@router.get("/{session_id}/labels/export")
+def export_labels(session_id: str):
+    data = session_service.export_labels_zip(session_id)
+    if data is None:
+        raise HTTPException(404, "Session not found")
+    filename = f"picflow-{session_id}-labels.zip"
+    return StreamingResponse(
+        iter([data]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/{session_id}/labels/import", response_model=LabelImportResult)
+async def import_labels(
+    session_id: str,
+    labels: Annotated[UploadFile | None, File()] = None,
+    label_names: Annotated[UploadFile | None, File()] = None,
+    archive: Annotated[UploadFile | None, File()] = None,
+):
+    labels_bytes: bytes | None = None
+    names_bytes: bytes | None = None
+    archive_bytes: bytes | None = None
+    if labels is not None:
+        labels_bytes = await labels.read()
+    if label_names is not None:
+        names_bytes = await label_names.read()
+    if archive is not None:
+        archive_bytes = await archive.read()
+    result = session_service.import_labels_from_upload(
+        session_id,
+        labels_file=labels_bytes,
+        label_names_file=names_bytes,
+        archive_file=archive_bytes,
+    )
+    if result is None:
+        raise HTTPException(404, "Session not found")
+    return LabelImportResult(**result)

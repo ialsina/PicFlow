@@ -1,4 +1,4 @@
-import type { Projection, Stats } from '../api'
+import type { LabelImportResult, Projection, Stats } from '../api'
 import { ConfigDrawer } from './ConfigDrawer'
 import { ScatterPlot } from './ScatterPlot'
 import { StatsPanel } from './StatsPanel'
@@ -16,6 +16,7 @@ type Props = {
   onSaveConfig: (patch: Record<string, unknown>) => Promise<void>
   onRecomputeUmap: () => void
   onTrain: () => void
+  onLabelsImported: (result: LabelImportResult) => Promise<void>
   onSelectImage: (id: number) => void
   activeLabels: number[]
   labelNames: Record<string, string>
@@ -33,6 +34,7 @@ export function RightPanel({
   onSaveConfig,
   onRecomputeUmap,
   onTrain,
+  onLabelsImported,
   onSelectImage,
   activeLabels,
   labelNames,
@@ -67,6 +69,7 @@ export function RightPanel({
         onSave={onSaveConfig}
         onRecomputeUmap={onRecomputeUmap}
         onTrain={onTrain}
+        onLabelsImported={onLabelsImported}
       />
     </section>
   )

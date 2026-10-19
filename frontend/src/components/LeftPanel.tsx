@@ -20,6 +20,7 @@ type Props = {
   onAcceptSuggestion: () => void
   onAddLabel: () => void
   onRenameLabel: (labelId: number, name: string) => void
+  onSelectLabel: (labelId: number) => void
 }
 
 function LabelNameCell({
@@ -104,6 +105,7 @@ export function LeftPanel({
   onAcceptSuggestion,
   onAddLabel,
   onRenameLabel,
+  onSelectLabel,
 }: Props) {
   const imgUrl = image
     ? `/api/sessions/${sessionId}/images/${image.id}/file`
@@ -192,8 +194,15 @@ export function LeftPanel({
         <div className="legend-grid">
           {sortedLabels.map((id) => (
               <div key={id} className="legend-cell">
-                <kbd>{labelDisplayKey(id)}</kbd>
-                <span className="swatch" style={{ background: LABEL_COLORS[id] }} />
+                <button
+                  type="button"
+                  className="legend-pick-btn"
+                  onClick={() => onSelectLabel(id)}
+                  title={`Assign label ${labelDisplayKey(id)}`}
+                >
+                  <kbd>{labelDisplayKey(id)}</kbd>
+                  <span className="swatch" style={{ background: LABEL_COLORS[id] }} />
+                </button>
                 <LabelNameCell
                   labelId={id}
                   labelNames={labelNames}
@@ -209,7 +218,9 @@ export function LeftPanel({
             </div>
           )}
         </div>
-        <p className="muted keys-hint">← → or j/k navigate · Backspace clears label</p>
+        <p className="muted keys-hint">
+          1–9, 0 or click number to label and advance · ← → or j/k navigate · Backspace clears
+        </p>
       </div>
     </section>
   )
