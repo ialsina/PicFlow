@@ -114,6 +114,11 @@ class StatsResponse(BaseModel):
     projection_method: str | None
 
 
+class AppConfigResponse(BaseModel):
+    default_image_root: str | None = None
+    allowed_image_roots: list[str] = Field(default_factory=list)
+
+
 class ProviderInfo(BaseModel):
     id: str
     name: str

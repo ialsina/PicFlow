@@ -38,6 +38,12 @@ class Settings(BaseSettings):
             if p.strip()
         ]
 
+    def default_image_root(self) -> str | None:
+        roots = self.allowed_root_paths()
+        if len(roots) == 1:
+            return str(roots[0])
+        return None
+
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 

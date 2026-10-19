@@ -102,6 +102,15 @@ export type ProviderInfo = {
   config_schema: Record<string, unknown>
 }
 
+export type AppConfig = {
+  default_image_root: string | null
+  allowed_image_roots: string[]
+}
+
+export function getAppConfig() {
+  return json<AppConfig>(`${BASE}/config`)
+}
+
 export function createSession(imageRoot: string, config?: Record<string, unknown>) {
   return json<SessionSummary>(`${BASE}/sessions`, {
     method: 'POST',

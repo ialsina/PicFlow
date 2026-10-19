@@ -110,6 +110,6 @@ Do **not** set `PICFLOW_DATABASE_URL` to `...@postgres:5434` for Compose: the ba
 4. **If the error mentions host `postgres` but you run uvicorn on the host:** that URL is for containers only — use `localhost` and your mapped port (`5434` when `PICFLOW_POSTGRES_PORT=5434`). See `backend/.env.example`.
 5. **Reset stack:** `docker compose down && docker compose up --build -d` then wait until `docker compose ps` shows backend and postgres **healthy**.
 
-Use **`/data/images`** (or a subfolder) as the image root in the UI — that path is inside the backend container, not on the host.
+When the backend is configured with a single allowed root (as in Compose), the UI picks it up from `GET /api/config` and starts sessions without asking for a path. Otherwise use an absolute folder path on the machine where the API runs. In Docker that is typically **`/data/images`** (or a subfolder) — inside the backend container, not on the host.
 
 [`docker-compose.yml`](docker-compose.yml) runs PostgreSQL, the API, and the frontend. The backend uses `PICFLOW_DATABASE_URL` to reach the `postgres` service and applies Alembic migrations on startup. `API_PROXY_TARGET=http://backend:8000` lets the Vite dev server in the frontend container reach the API. Local `npm run dev` still proxies to `127.0.0.1:8000` by default.

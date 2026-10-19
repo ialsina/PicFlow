@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { listSessions, type SessionSummary } from '../api'
+import { getAppConfig, listSessions, type SessionSummary } from '../api'
 
 type Props = {
   onStart: (imageRoot: string) => void
@@ -26,10 +26,25 @@ export function SessionStart({
   error,
 }: Props) {
   const [path, setPath] = useState('')
+  const [defaultImageRoot, setDefaultImageRoot] = useState<string | null>(null)
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getAppConfig()
+      .then((cfg) => {
+        if (!cancelled) setDefaultImageRoot(cfg.default_image_root)
+      })
+      .catch(() => {
+        if (!cancelled) setDefaultImageRoot(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -55,7 +70,8 @@ export function SessionStart({
 
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (path.trim()) onStart(path.trim())
+    const root = defaultImageRoot ?? path.trim()
+    if (root) onStart(root)
   }
 
   async function handleRemove(id: string) {
@@ -120,17 +136,26 @@ export function SessionStart({
 
       <form onSubmit={submit}>
         <h2 className="new-session-heading">New session</h2>
-        <label>
-          Image folder on server
-          <input
-            type="text"
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            placeholder="/path/to/photos"
-            disabled={loading}
-          />
-        </label>
-        <button type="submit" disabled={loading || !path.trim()}>
+        {defaultImageRoot ? (
+          <p className="muted new-session-mounted-root" title={defaultImageRoot}>
+            Using mounted images at <code>{truncatePath(defaultImageRoot, 72)}</code>
+          </p>
+        ) : (
+          <label>
+            Image folder on server
+            <input
+              type="text"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="/path/to/photos"
+              disabled={loading}
+            />
+          </label>
+        )}
+        <button
+          type="submit"
+          disabled={loading || !(defaultImageRoot ?? path.trim())}
+        >
           {loading ? 'Starting…' : 'Start session'}
         </button>
       </form>

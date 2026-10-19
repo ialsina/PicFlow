@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.routes import providers, sessions
+from app.api.routes import config, providers, sessions
 from app.config import settings
 from app.database_errors import database_unavailable_detail
 from app.db import engine, init_db
@@ -47,6 +47,7 @@ app.add_middleware(
 )
 app.include_router(sessions.router)
 app.include_router(providers.router)
+app.include_router(config.router)
 
 
 @app.get("/api/health")
