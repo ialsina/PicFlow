@@ -74,15 +74,15 @@ See [`config.example.yaml`](config.example.yaml). Most values can be changed in 
 
 Export labeled images for a session (Settings → **Labels (CSV)** in the UI, or API):
 
-- `GET /api/sessions/{id}/labels/export` — ZIP containing:
-  - **`labels.csv`**: `image_path` (relative to session `image_root`), `image_name` (basename), `label` (0–9). Only labeled images are included.
-  - **`label_names.csv`**: `label`, `name` for class ids used in the export (plus any custom names from session config).
+- `GET /api/sessions/{id}/labels/export` — ZIP named `picflow-{session_id}-labels.zip` containing:
+  - **`picflow-{session_id}-labels.csv`**: `image_path` (relative to session `image_root`), `image_name` (basename), `label` (0–9). Only labeled images are included.
+  - **`picflow-{session_id}-label_names.csv`**: `label`, `name` for class ids used in the export (plus any custom names from session config).
 
 Import labels into an existing session (images must already be indexed):
 
 - `POST /api/sessions/{id}/labels/import` — `multipart/form-data` with either:
-  - `archive` — ZIP with the CSV files above, or
-  - `labels` — `labels.csv` (required), optional `label_names` — `label_names.csv`
+  - `archive` — ZIP with those CSV files (or legacy `labels.csv` / `label_names.csv` names), or
+  - `labels` — labels CSV (required), optional `label_names` — label names CSV
 
 Matching prefers `image_path`, then unique `image_name`. Existing labels are overwritten. The response reports counts (`applied`, `skipped_unknown`, `skipped_ambiguous`, `skipped_invalid`) and sample `errors`.
 

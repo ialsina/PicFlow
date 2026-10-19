@@ -9,6 +9,19 @@ from pathlib import Path, PurePosixPath
 LABELS_CSV = "labels.csv"
 LABEL_NAMES_CSV = "label_names.csv"
 
+
+def export_archive_stem(session_id: str) -> str:
+    return f"picflow-{session_id}-labels"
+
+
+def export_labels_member_name(session_id: str) -> str:
+    return f"{export_archive_stem(session_id)}.csv"
+
+
+def export_label_names_member_name(session_id: str) -> str:
+    return f"picflow-{session_id}-label_names.csv"
+
+
 PATH_HEADERS = frozenset({"image_path", "path", "image", "relative_path"})
 NAME_HEADERS = frozenset({"image_name", "filename", "name", "file_name"})
 LABEL_HEADERS = frozenset({"label", "class", "label_id", "class_id"})
@@ -120,11 +133,13 @@ def parse_label_names_csv(data: bytes | str) -> list[LabelNameRow]:
 def extract_zip_payloads(archive: bytes) -> tuple[bytes, bytes | None]:
     with zipfile.ZipFile(io.BytesIO(archive)) as zf:
         names = {info.filename: info for info in zf.infolist() if not info.is_dir()}
-        labels_key = _find_zip_member(names, LABELS_CSV)
+        labels_key = _find_labels_csv_member(names)
         if not labels_key:
-            raise ValueError(f"ZIP archive must contain {LABELS_CSV}")
+            raise ValueError(
+                f"ZIP archive must contain {LABELS_CSV} or a *-labels.csv file"
+            )
         labels_data = zf.read(labels_key)
-        names_key = _find_zip_member(names, LABEL_NAMES_CSV)
+        names_key = _find_label_names_csv_member(names)
         names_data = zf.read(names_key) if names_key else None
     return labels_data, names_data
 
@@ -135,6 +150,30 @@ def _find_zip_member(names: dict[str, zipfile.ZipInfo], basename: str) -> str | 
         if Path(name).name.lower() == target:
             return name
     return None
+
+
+def _find_zip_member_by_suffix(
+    names: dict[str, zipfile.ZipInfo], suffix: str
+) -> str | None:
+    target = suffix.lower()
+    matches = [name for name in names if Path(name).name.lower().endswith(target)]
+    if not matches:
+        return None
+    return min(matches, key=lambda n: Path(n).name)
+
+
+def _find_labels_csv_member(names: dict[str, zipfile.ZipInfo]) -> str | None:
+    found = _find_zip_member(names, LABELS_CSV)
+    if found:
+        return found
+    return _find_zip_member_by_suffix(names, "-labels.csv")
+
+
+def _find_label_names_csv_member(names: dict[str, zipfile.ZipInfo]) -> str | None:
+    found = _find_zip_member(names, LABEL_NAMES_CSV)
+    if found:
+        return found
+    return _find_zip_member_by_suffix(names, "-label_names.csv")
 
 
 def build_labels_csv(rows: list[tuple[str, str, int]]) -> bytes:
@@ -165,11 +204,15 @@ def build_label_names_csv(
     return buf.getvalue().encode("utf-8")
 
 
-def build_export_zip(labels_csv: bytes, label_names_csv: bytes) -> bytes:
+def build_export_zip(
+    session_id: str, labels_csv: bytes, label_names_csv: bytes
+) -> bytes:
+    labels_name = export_labels_member_name(session_id)
+    names_name = export_label_names_member_name(session_id)
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(LABELS_CSV, labels_csv)
-        zf.writestr(LABEL_NAMES_CSV, label_names_csv)
+        zf.writestr(labels_name, labels_csv)
+        zf.writestr(names_name, label_names_csv)
     return out.getvalue()
 
 

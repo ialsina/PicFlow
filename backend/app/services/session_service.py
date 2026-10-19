@@ -728,7 +728,7 @@ def export_labels_zip(session_id: str) -> bytes | None:
 
     labels_csv = build_labels_csv(export_rows)
     names_csv = build_label_names_csv(label_names, used_labels)
-    return build_export_zip(labels_csv, names_csv)
+    return build_export_zip(session_id, labels_csv, names_csv)
 
 
 def import_labels(

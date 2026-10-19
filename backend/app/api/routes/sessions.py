@@ -18,6 +18,7 @@ from app.schemas import (
     TrainReport,
 )
 from app.services import session_service
+from app.services.label_io import export_archive_stem
 from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
@@ -176,7 +177,7 @@ def export_labels(session_id: str):
     data = session_service.export_labels_zip(session_id)
     if data is None:
         raise HTTPException(404, "Session not found")
-    filename = f"picflow-{session_id}-labels.zip"
+    filename = f"{export_archive_stem(session_id)}.zip"
     return StreamingResponse(
         iter([data]),
         media_type="application/zip",
